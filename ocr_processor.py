@@ -118,6 +118,11 @@ async def call_claude(image_bytes: bytes) -> dict | None:
         data = json.loads(text)
 
         if not data.get('_wrong_format'):
+            # Trích STT từ mã đơn: #HD260628165 → bỏ "#HD" + 6 số ngày → còn "165"
+            ma_don = data.get('ma_don', '')
+            match = re.match(r'#?HD\d{6}(\d+)', ma_don)
+            data['stt'] = match.group(1) if match else ma_don
+
             tong = data.get('tong_tien', 0)
             try:
                 data['tong_tien_fmt'] = f"{int(tong):,} vnđ".replace(',', '.')
