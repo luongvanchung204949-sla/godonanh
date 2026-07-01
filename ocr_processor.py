@@ -4,15 +4,14 @@ import json
 import os
 import re
 import io
-from PIL import Image, ImageOps
-import cv2
 import numpy as np
+from PIL import Image, ImageOps, ImageFilter
 
 client = anthropic.Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
 
-# Ngưỡng phát hiện ảnh mờ — giá trị càng thấp càng mờ
-# Dưới 80: ảnh mờ, không đọc được chính xác
-BLUR_THRESHOLD = 80
+# Ngưỡng phát hiện ảnh mờ (dùng PIL FIND_EDGES + variance)
+# Dưới ngưỡng này = ảnh mờ, không đọc được chính xác
+BLUR_THRESHOLD = 100
 
 PROMPT = """Đây là ảnh phiếu giao hàng. Hãy trích xuất chính xác các thông tin sau và trả về JSON:
 
@@ -33,7 +32,7 @@ def fix_image_rotation(image_bytes: bytes) -> bytes:
     """Tự động xoay ảnh về đúng chiều dựa theo EXIF."""
     try:
         img = Image.open(io.BytesIO(image_bytes))
-        img = ImageOps.exif_transpose(img)  # Xoay theo EXIF
+        img = ImageOps.exif_transpose(img)
         output = io.BytesIO()
         img.save(output, format='JPEG', quality=95)
         return output.getvalue()
@@ -43,17 +42,19 @@ def fix_image_rotation(image_bytes: bytes) -> bytes:
 
 
 def detect_blur(image_bytes: bytes) -> float:
-    """Tính độ sắc nét của ảnh bằng Laplacian variance. Càng thấp càng mờ."""
+    """
+    Tính độ sắc nét bằng PIL FIND_EDGES + variance.
+    Dùng Pillow + numpy thuần — không cần OpenCV.
+    Giá trị càng thấp = ảnh càng mờ.
+    """
     try:
-        img_array = np.frombuffer(image_bytes, dtype=np.uint8)
-        img = cv2.imdecode(img_array, cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            return 999  # Không decode được thì coi như sắc nét
-        score = cv2.Laplacian(img, cv2.CV_64F).var()
-        return score
+        img = Image.open(io.BytesIO(image_bytes)).convert('L')
+        edges = img.filter(ImageFilter.FIND_EDGES)
+        arr = np.array(edges, dtype=np.float64)
+        return float(arr.var())
     except Exception as e:
         print(f"[Blur detect] Error: {e}")
-        return 999
+        return 9999.0  # Lỗi thì coi như sắc nét, không chặn
 
 
 async def extract_order_info(image_bytes: bytes) -> dict | None:
@@ -62,8 +63,8 @@ async def extract_order_info(image_bytes: bytes) -> dict | None:
 
     # Bước 2: Kiểm tra độ mờ
     blur_score = detect_blur(image_bytes)
+    print(f"[Blur detect] Score = {blur_score:.1f}")
     if blur_score < BLUR_THRESHOLD:
-        print(f"[Blur detect] Score={blur_score:.1f} — ảnh quá mờ, bỏ qua")
         return {"_blur": True, "_blur_score": round(blur_score, 1)}
 
     # Bước 3: Gửi Claude OCR
@@ -99,7 +100,6 @@ async def extract_order_info(image_bytes: bytes) -> dict | None:
 
         data = json.loads(text)
 
-        # Format tong_tien để hiển thị đẹp
         tong = data.get('tong_tien', 0)
         try:
             data['tong_tien_fmt'] = f"{int(tong):,} vnđ".replace(',', '.')
