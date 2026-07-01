@@ -2,7 +2,9 @@ import gspread
 from google.oauth2.service_account import Credentials
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
+
+VIETNAM_TZ_OFFSET = timedelta(hours=7)
 
 SCOPES = [
     'https://spreadsheets.google.com/feeds',
@@ -22,7 +24,7 @@ def get_worksheet():
     spreadsheet = gc.open_by_key(sheet_id)
 
     # Tab theo ngày: 01-07-2026
-    today = datetime.now().strftime('%d-%m-%Y')
+    today = (datetime.utcnow() + VIETNAM_TZ_OFFSET).strftime('%d-%m-%Y')
 
     try:
         worksheet = spreadsheet.worksheet(today)
@@ -41,7 +43,7 @@ def get_worksheet():
 def write_to_sheet(data: dict) -> int | None:
     try:
         worksheet = get_worksheet()
-        now = datetime.now().strftime('%H:%M:%S')
+        now = (datetime.utcnow() + VIETNAM_TZ_OFFSET).strftime('%H:%M:%S')
 
         row = [
             data.get('stt', ''),
