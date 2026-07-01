@@ -13,9 +13,12 @@ client = anthropic.Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
 # Dưới ngưỡng này = ảnh mờ, không đọc được chính xác
 BLUR_THRESHOLD = 100
 
-PROMPT = """Đây là ảnh phiếu giao hàng. Hãy trích xuất chính xác các thông tin sau và trả về JSON:
+PROMPT = """Đây là ảnh phiếu giao hàng. Ảnh có thể bị xoay 90°, 180° hoặc 270° — hãy xoay ảnh trong đầu để đọc đúng chiều trước khi trích xuất.
 
-- "so_thu_tu": số viết tay bằng bút lớn ở góc trên bên phải tờ phiếu (thường là 2-3 chữ số)
+Phiếu có logo "Mylan Vintage" hoặc tên shop ở trên cùng. Dựa vào chiều của chữ in để xác định hướng đúng.
+
+Trích xuất chính xác các thông tin sau và trả về JSON:
+- "so_thu_tu": số viết tay bằng bút lớn (thường là 2-3 chữ số, nằm gần góc của tờ phiếu)
 - "ten_khach": tên khách hàng (sau nhãn "Khách hàng:" hoặc "Khách")
 - "so_dien_thoai": số điện thoại (sau nhãn "Số điện thoại:")
 - "dia_chi": địa chỉ đầy đủ (sau nhãn "Địa chỉ:"), nếu không có thì để chuỗi rỗng ""
