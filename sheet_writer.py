@@ -9,7 +9,7 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive',
 ]
 
-HEADERS = ['STT', 'Tên khách', 'Số điện thoại', 'Địa chỉ', 'Tổng tiền', 'Thời gian nhập']
+HEADERS = ['Mã đơn', 'Tên khách', 'Số điện thoại', 'Địa chỉ', 'Tổng tiền', 'Thời gian nhập']
 
 
 def get_worksheet():
@@ -44,7 +44,7 @@ def write_to_sheet(data: dict) -> int | None:
         now = datetime.now().strftime('%H:%M:%S')
 
         row = [
-            data.get('so_thu_tu', ''),
+            data.get('ma_don', ''),
             data.get('ten_khach', ''),
             data.get('so_dien_thoai', ''),
             data.get('dia_chi', ''),
