@@ -17,7 +17,7 @@ batch_state: dict = {}
 
 def get_state(chat_id: int) -> dict:
     if chat_id not in batch_state:
-        batch_state[chat_id] = {"ok": [], "fail": 0, "blur": [], "start_time": datetime.now()}
+        batch_state[chat_id] = {"ok": [], "fail": 0, "blur": [], "wrong_fmt": 0, "start_time": datetime.now()}
     return batch_state[chat_id]
 
 
@@ -32,16 +32,20 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         photo_file = await context.bot.get_file(photo.file_id)
         photo_bytes = await photo_file.download_as_bytearray()
-
         result = await extract_order_info(bytes(photo_bytes))
         state = get_state(chat_id)
 
         if result is None:
-            # Lỗi OCR không xác định
             state["fail"] += 1
 
+        elif result.get("_wrong_format"):
+            await message.reply_text(
+                "⛔ Ảnh này không phải phiếu CHOTDON.VN (phiếu viết tay hoặc định dạng khác).\n"
+                "Bot chỉ xử lý phiếu in từ hệ thống CHOTDON.VN."
+            )
+            state["wrong_fmt"] += 1
+
         elif result.get("_blur"):
-            # Ảnh bị mờ — báo ngay để anh chụp lại
             score = result.get("_blur_score", 0)
             await message.reply_text(
                 f"⚠️ Ảnh này bị mờ (độ sắc nét: {score}), không đọc được chính xác.\n"
@@ -50,7 +54,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             state["blur"].append(score)
 
         else:
-            # Thành công
             row_num = write_to_sheet(result)
             if row_num:
                 state["ok"].append({
@@ -70,14 +73,20 @@ async def handle_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     state = batch_state.get(chat_id)
 
-    if not state or (len(state["ok"]) == 0 and state["fail"] == 0 and len(state["blur"]) == 0):
+    total_processed = (
+        len(state["ok"]) + state["fail"] + len(state["blur"]) + state["wrong_fmt"]
+        if state else 0
+    )
+
+    if not state or total_processed == 0:
         await update.message.reply_text("ℹ️ Chưa có ảnh nào được gửi kể từ lần /xong trước.")
         return
 
     ok_list = state["ok"]
     fail_count = state["fail"]
     blur_count = len(state["blur"])
-    total = len(ok_list) + fail_count + blur_count
+    wrong_fmt_count = state["wrong_fmt"]
+    total = len(ok_list) + fail_count + blur_count + wrong_fmt_count
     today = datetime.now().strftime('%d-%m-%Y')
 
     lines = [
@@ -85,9 +94,10 @@ async def handle_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"━━━━━━━━━━━━━━━",
         f"✅ Thành công: <b>{len(ok_list)}/{total}</b> ảnh",
     ]
-
     if blur_count > 0:
         lines.append(f"📷 Ảnh mờ cần chụp lại: <b>{blur_count}</b> ảnh")
+    if wrong_fmt_count > 0:
+        lines.append(f"⛔ Không phải phiếu CHOTDON.VN: <b>{wrong_fmt_count}</b> ảnh")
     if fail_count > 0:
         lines.append(f"❌ Lỗi khác: <b>{fail_count}</b> ảnh")
 
