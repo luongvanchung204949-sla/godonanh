@@ -29,18 +29,18 @@ BƯỚC 2 — Nếu hợp lệ, trích xuất 5 trường sau:
    QUAN TRỌNG: Giữ nguyên số 0 đầu tiên. SĐT Việt Nam luôn bắt đầu bằng 0 (10 chữ số).
    Ví dụ đúng: "0702464545" — Ví dụ SAI: "702464545"
 4. "dia_chi": địa chỉ đầy đủ (sau "Địa chỉ:"), để "" nếu không có
-5. "tong_tien": CHỈ lấy số tiền ở dòng có nhãn "Tổng" — TUYỆT ĐỐI không cộng các dòng khác
+5. "so_tien": object chứa TẤT CẢ các dòng tiền xuất hiện trên phiếu theo đúng nhãn.
+   Các nhãn thường gặp: "tam_tinh", "tien_coc", "phi_van_chuyen", "tong"
+   Mỗi giá trị là số nguyên, bỏ dấu chấm/phẩy và chữ "vnđ".
 
-   Phiếu thường có các dòng số sau, chỉ lấy dòng CUỐI CÙNG là "Tổng":
-   - Tạm tính:        158.000 vnđ  ← KHÔNG lấy
-   - Tiền cọc:        100.000 vnđ  ← KHÔNG lấy
-   - Phí vận chuyển:   37.000 vnđ  ← KHÔNG lấy
-   - Tổng:             95.000 vnđ  ← LẤY SỐ NÀY → tong_tien = 95000
+   Ví dụ phiếu có: Tạm tính 74.000 / Tiền cọc 100.000 / Phí ship 35.000 / Tổng 9.000
+   → "so_tien": {"tam_tinh": 74000, "tien_coc": 100000, "phi_van_chuyen": 35000, "tong": 9000}
 
-   Sai phổ biến: cộng 158000+100000+37000+95000=390000 → SAI. Đúng = 95000.
+   Ví dụ phiếu có: Tạm tính 60.000 / Phí ship 35.000 / Tổng 95.000
+   → "so_tien": {"tam_tinh": 60000, "phi_van_chuyen": 35000, "tong": 95000}
 
 Ví dụ output đúng:
-{"ma_don": "#HD26062741", "ten_khach": "Nhat Khanh", "so_dien_thoai": "0702464545", "dia_chi": "32 Ngô Nhân Tịnh, P. Phú Hậu, TP Huế", "tong_tien": 95000}
+{"ma_don": "#HD260629182", "ten_khach": "Vy Nguyen", "so_dien_thoai": "0937743792", "dia_chi": "138/4 khu Phố 10, Phường Tân Biên, TP Biên Hòa, Đồng Nai", "so_tien": {"tam_tinh": 74000, "tien_coc": 100000, "phi_van_chuyen": 35000, "tong": 9000}}
 
 Chỉ trả về JSON thuần túy, không markdown, không giải thích."""
 
@@ -126,7 +126,10 @@ async def call_claude(image_bytes: bytes) -> dict | None:
             match = re.match(r'#?HD\d{6}(\d+)', ma_don)
             data['stt'] = match.group(1) if match else ma_don
 
-            tong = data.get('tong_tien', 0)
+            # Lấy tong_tien từ object so_tien (Python tự extract, không để Claude chọn)
+            so_tien = data.get('so_tien', {})
+            tong = so_tien.get('tong', data.get('tong_tien', 0))
+            data['tong_tien'] = tong
             try:
                 data['tong_tien_fmt'] = f"{int(tong):,} vnđ".replace(',', '.')
             except (ValueError, TypeError):
