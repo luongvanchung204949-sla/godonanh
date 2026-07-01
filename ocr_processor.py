@@ -16,13 +16,13 @@ PROMPT = """Đây là ảnh phiếu giao hàng.
 BƯỚC 1 — Kiểm tra định dạng:
 Phiếu hợp lệ cần có ĐẦY ĐỦ:
 - Logo hoặc chữ "CHOTDON.VN" (có thể ở cuối hoặc đầu phiếu tùy chiều ảnh)
-- Mã đơn hàng dạng "#HD..." (ví dụ: #HD26062741)
+- Mã đơn hàng dạng "#HD..." (ví dụ: #HD260628165)
 - Các trường thông tin được IN sẵn (không phải viết tay hoàn toàn)
 
 Nếu KHÔNG có → trả về: {"_wrong_format": true}
 
 BƯỚC 2 — Nếu hợp lệ, trích xuất:
-- "so_thu_tu": số viết tay bằng bút lớn (2-3 chữ số, thường ở góc phiếu)
+- "ma_don": mã đơn hàng in sẵn trên phiếu, dạng "#HD..." — lấy đầy đủ cả ký tự # và HD
 - "ten_khach": tên khách (sau "Khách hàng:" hoặc "Khách") — KHÔNG phải tên shop
 - "so_dien_thoai": SĐT khách (sau "Số điện thoại:") — KHÔNG phải SĐT shop
 - "dia_chi": địa chỉ (sau "Địa chỉ:"), để "" nếu không có
@@ -31,14 +31,13 @@ BƯỚC 2 — Nếu hợp lệ, trích xuất:
 Lưu ý về "tong_tien":
   Phiếu có thể có: Tạm tính, Tiền cọc, Phí vận chuyển, và cuối cùng là Tổng.
   Chỉ lấy số tiền ở dòng "Tổng" — đây là số khách cần trả, đã trừ cọc và cộng ship.
-  Ví dụ: Tạm tính 158.000 / Tiền cọc 100.000 / Phí ship 37.000 / Tổng 95.000
-  → tong_tien = 95000 (không phải 158000 hay 195000)
+  Ví dụ: Tạm tính 60.000 / Phí ship 35.000 / Tổng 95.000
+  → tong_tien = 95000 (không phải 60000 hay 155000)
 
-Lưu ý về tên/SĐT shop:
-  "Mylan Vintage" và "0336927690" là thông tin shop, KHÔNG phải khách hàng.
+Lưu ý: "Mylan Vintage" và "0336927690" là thông tin shop, KHÔNG phải khách hàng.
 
 Ví dụ output:
-{"so_thu_tu": "142", "ten_khach": "Nhat Khanh", "so_dien_thoai": "0702464545", "dia_chi": "32 Ngô Nhân Tịnh, P. Phú Hậu, TP Huế", "tong_tien": 95000}
+{"ma_don": "#HD260628165", "ten_khach": "Đoàn Thị Bích Ngọc", "so_dien_thoai": "0766522706", "dia_chi": "Số 44 ngõ 191 Khương Thượng, Kim Liên, Hà Nội", "tong_tien": 95000}
 
 Chỉ trả về JSON thuần túy, không markdown, không giải thích."""
 
@@ -136,28 +135,20 @@ async def call_claude(image_bytes: bytes) -> dict | None:
 
 
 async def extract_order_info(image_bytes: bytes) -> dict | None:
-    # Bước 1: Xoay theo EXIF nếu có
     image_bytes = fix_image_rotation(image_bytes)
 
-    # Bước 2: Kiểm tra độ mờ
     blur_score = detect_blur(image_bytes)
     print(f"[Blur detect] Score = {blur_score:.1f}")
     if blur_score < BLUR_THRESHOLD:
         return {"_blur": True, "_blur_score": round(blur_score, 1)}
 
-    # Bước 3: OCR lần 1
     result = await call_claude(image_bytes)
 
-    # Bước 4: Nếu sai định dạng HOẶC đọc nhầm tên shop → thử xoay 180° OCR lại
-    # (ảnh ngược: CHOTDON.VN logo bị lộn → Claude không nhận ra → báo sai định dạng)
     needs_rotation = result and (result.get('_wrong_format') or is_result_wrong(result))
-
     if needs_rotation:
         print("[Rotation] Thử xoay 180° và OCR lại")
         rotated = rotate_180(image_bytes)
         result2 = await call_claude(rotated)
-
-        # Dùng kết quả mới nếu đọc được và không sai
         if result2 and not result2.get('_wrong_format') and not is_result_wrong(result2):
             result = result2
             print("[Rotation] Xoay 180° thành công")
