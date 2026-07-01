@@ -12,14 +12,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Lưu trạng thái xử lý theo từng nhóm (chat_id)
-# batch_state[chat_id] = {"ok": [...], "fail": 0}
 batch_state: dict = {}
 
 
 def get_state(chat_id: int) -> dict:
     if chat_id not in batch_state:
-        batch_state[chat_id] = {"ok": [], "fail": 0, "start_time": datetime.now()}
+        batch_state[chat_id] = {"ok": [], "fail": 0, "blur": [], "start_time": datetime.now()}
     return batch_state[chat_id]
 
 
@@ -29,7 +27,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     chat_id = message.chat_id
-    photo = message.photo[-1]  # Độ phân giải cao nhất
+    photo = message.photo[-1]
 
     try:
         photo_file = await context.bot.get_file(photo.file_id)
@@ -38,7 +36,21 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = await extract_order_info(bytes(photo_bytes))
         state = get_state(chat_id)
 
-        if result:
+        if result is None:
+            # Lỗi OCR không xác định
+            state["fail"] += 1
+
+        elif result.get("_blur"):
+            # Ảnh bị mờ — báo ngay để anh chụp lại
+            score = result.get("_blur_score", 0)
+            await message.reply_text(
+                f"⚠️ Ảnh này bị mờ (độ sắc nét: {score}), không đọc được chính xác.\n"
+                f"Vui lòng chụp lại và gửi lại ảnh này."
+            )
+            state["blur"].append(score)
+
+        else:
+            # Thành công
             row_num = write_to_sheet(result)
             if row_num:
                 state["ok"].append({
@@ -48,8 +60,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 })
             else:
                 state["fail"] += 1
-        else:
-            state["fail"] += 1
 
     except Exception as e:
         logger.error(f"Error processing photo: {e}")
@@ -57,30 +67,30 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Lệnh /xong — gửi tổng kết và reset trạng thái."""
     chat_id = update.message.chat_id
     state = batch_state.get(chat_id)
 
-    if not state or (len(state["ok"]) == 0 and state["fail"] == 0):
+    if not state or (len(state["ok"]) == 0 and state["fail"] == 0 and len(state["blur"]) == 0):
         await update.message.reply_text("ℹ️ Chưa có ảnh nào được gửi kể từ lần /xong trước.")
         return
 
     ok_list = state["ok"]
     fail_count = state["fail"]
-    total = len(ok_list) + fail_count
+    blur_count = len(state["blur"])
+    total = len(ok_list) + fail_count + blur_count
     today = datetime.now().strftime('%d-%m-%Y')
 
-    # Dòng tổng kết
     lines = [
         f"📋 <b>Tổng kết lô ảnh — {today}</b>",
         f"━━━━━━━━━━━━━━━",
         f"✅ Thành công: <b>{len(ok_list)}/{total}</b> ảnh",
     ]
 
+    if blur_count > 0:
+        lines.append(f"📷 Ảnh mờ cần chụp lại: <b>{blur_count}</b> ảnh")
     if fail_count > 0:
-        lines.append(f"❌ Lỗi / không đọc được: <b>{fail_count}</b> ảnh")
+        lines.append(f"❌ Lỗi khác: <b>{fail_count}</b> ảnh")
 
-    # Danh sách các đơn đã ghi (tối đa 20 dòng để không quá dài)
     if ok_list:
         lines.append(f"━━━━━━━━━━━━━━━")
         lines.append(f"<b>Các đơn đã ghi vào Sheet:</b>")
@@ -93,13 +103,10 @@ async def handle_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append(f"📊 Xem chi tiết: Sheet tab <b>{today}</b>")
 
     await update.message.reply_text("\n".join(lines), parse_mode='HTML')
-
-    # Reset trạng thái cho lần gửi tiếp theo
     batch_state.pop(chat_id, None)
 
 
 async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Lệnh /reset — huỷ đếm lô hiện tại (nếu gửi nhầm)."""
     chat_id = update.message.chat_id
     batch_state.pop(chat_id, None)
     await update.message.reply_text("🔄 Đã reset. Gửi ảnh mới là bắt đầu lô tiếp theo.")
@@ -108,11 +115,9 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     token = os.environ['TELEGRAM_BOT_TOKEN']
     app = Application.builder().token(token).build()
-
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CommandHandler("xong", handle_done))
     app.add_handler(CommandHandler("reset", handle_reset))
-
     logger.info("✅ OCR Order Bot đã khởi động.")
     app.run_polling(allowed_updates=["message"])
 
