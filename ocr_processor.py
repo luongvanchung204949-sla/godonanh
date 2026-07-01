@@ -16,28 +16,31 @@ PROMPT = """Đây là ảnh phiếu giao hàng.
 BƯỚC 1 — Kiểm tra định dạng:
 Phiếu hợp lệ cần có ĐẦY ĐỦ:
 - Logo hoặc chữ "CHOTDON.VN" (có thể ở cuối hoặc đầu phiếu tùy chiều ảnh)
-- Mã đơn hàng dạng "#HD..." (ví dụ: #HD260628165)
+- Mã đơn hàng dạng "#HD..." (ví dụ: #HD26062741)
 - Các trường thông tin được IN sẵn (không phải viết tay hoàn toàn)
 
 Nếu KHÔNG có → trả về: {"_wrong_format": true}
 
-BƯỚC 2 — Nếu hợp lệ, trích xuất:
-- "ma_don": mã đơn hàng in sẵn trên phiếu, dạng "#HD..." — lấy đầy đủ cả ký tự # và HD
-- "ten_khach": tên khách (sau "Khách hàng:" hoặc "Khách") — KHÔNG phải tên shop
-- "so_dien_thoai": SĐT khách (sau "Số điện thoại:") — KHÔNG phải SĐT shop
-- "dia_chi": địa chỉ (sau "Địa chỉ:"), để "" nếu không có
-- "tong_tien": số tiền trên dòng CÓ NHÃN "Tổng" — lấy đúng số này, KHÔNG tự tính toán
+BƯỚC 2 — Nếu hợp lệ, trích xuất 5 trường sau:
 
-Lưu ý về "tong_tien":
-  Phiếu có thể có: Tạm tính, Tiền cọc, Phí vận chuyển, và cuối cùng là Tổng.
-  Chỉ lấy số tiền ở dòng "Tổng" — đây là số khách cần trả, đã trừ cọc và cộng ship.
-  Ví dụ: Tạm tính 60.000 / Phí ship 35.000 / Tổng 95.000
-  → tong_tien = 95000 (không phải 60000 hay 155000)
+1. "ma_don": mã đơn hàng in sẵn, dạng "#HD..." — lấy đầy đủ
+2. "ten_khach": tên khách (sau nhãn "Khách hàng:" hoặc "Khách") — KHÔNG phải tên shop Mylan Vintage
+3. "so_dien_thoai": SĐT của khách (sau "Số điện thoại:") — KHÔNG phải SĐT shop 0336927690
+   QUAN TRỌNG: Giữ nguyên số 0 đầu tiên. SĐT Việt Nam luôn bắt đầu bằng 0 (10 chữ số).
+   Ví dụ đúng: "0702464545" — Ví dụ SAI: "702464545"
+4. "dia_chi": địa chỉ đầy đủ (sau "Địa chỉ:"), để "" nếu không có
+5. "tong_tien": CHỈ lấy số tiền ở dòng có nhãn "Tổng" — TUYỆT ĐỐI không cộng các dòng khác
 
-Lưu ý: "Mylan Vintage" và "0336927690" là thông tin shop, KHÔNG phải khách hàng.
+   Phiếu thường có các dòng số sau, chỉ lấy dòng CUỐI CÙNG là "Tổng":
+   - Tạm tính:        158.000 vnđ  ← KHÔNG lấy
+   - Tiền cọc:        100.000 vnđ  ← KHÔNG lấy
+   - Phí vận chuyển:   37.000 vnđ  ← KHÔNG lấy
+   - Tổng:             95.000 vnđ  ← LẤY SỐ NÀY → tong_tien = 95000
 
-Ví dụ output:
-{"ma_don": "#HD260628165", "ten_khach": "Đoàn Thị Bích Ngọc", "so_dien_thoai": "0766522706", "dia_chi": "Số 44 ngõ 191 Khương Thượng, Kim Liên, Hà Nội", "tong_tien": 95000}
+   Sai phổ biến: cộng 158000+100000+37000+95000=390000 → SAI. Đúng = 95000.
+
+Ví dụ output đúng:
+{"ma_don": "#HD26062741", "ten_khach": "Nhat Khanh", "so_dien_thoai": "0702464545", "dia_chi": "32 Ngô Nhân Tịnh, P. Phú Hậu, TP Huế", "tong_tien": 95000}
 
 Chỉ trả về JSON thuần túy, không markdown, không giải thích."""
 
