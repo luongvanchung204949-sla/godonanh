@@ -57,7 +57,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             row_num = write_to_sheet(result)
             if row_num:
                 state["ok"].append({
-                    "stt": result.get("so_thu_tu", "?"),
+                    "ma_don": result.get("ma_don", "?"),
                     "ten": result.get("ten_khach", "?"),
                     "tong": result.get("tong_tien_fmt", "?"),
                 })
@@ -105,7 +105,7 @@ async def handle_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"━━━━━━━━━━━━━━━")
         lines.append(f"<b>Các đơn đã ghi vào Sheet:</b>")
         for i, item in enumerate(ok_list[:20], 1):
-            lines.append(f"{i}. STT <b>{item['stt']}</b> | {item['ten']} | {item['tong']}")
+            lines.append(f"{i}. {item["ma_don"]} | {item['ten']} | {item['tong']}")
         if len(ok_list) > 20:
             lines.append(f"... và {len(ok_list) - 20} đơn khác")
 
