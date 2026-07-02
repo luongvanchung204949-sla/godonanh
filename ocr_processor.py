@@ -106,6 +106,11 @@ def is_result_wrong(data: dict) -> bool:
     if ten_strip and ten_strip[0].isdigit():
         return True
 
+    # SĐT Việt Nam luôn đủ 10 chữ số và bắt đầu bằng 0
+    # Đây là dấu hiệu mạnh nhất khi ảnh bị xoay → trường bị nhầm
+    if sdt and (len(sdt) != 10 or not sdt.startswith('0')):
+        return True
+
     # Tổng tiền = 0 trong khi có dữ liệu khác → parse thất bại
     so_tien = data.get('so_tien', {})
     tong = so_tien.get('tong', data.get('tong_tien', None))
