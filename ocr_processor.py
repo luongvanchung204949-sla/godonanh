@@ -82,15 +82,36 @@ def detect_blur(image_bytes: bytes) -> float:
 
 
 def is_result_wrong(data: dict) -> bool:
-    """Phát hiện kết quả sai do ảnh bị xoay ngược."""
+    """Phát hiện kết quả sai do ảnh bị xoay (bất kỳ góc nào)."""
     ten = (data.get('ten_khach') or '').lower()
     sdt = (data.get('so_dien_thoai') or '').replace(' ', '').replace('-', '')
-    shop_keywords = ['mylan', 'vintage', 'zhang', 'page']
+
+    # Tên shop bị nhầm làm tên khách
+    shop_keywords = ['mylan', 'vintage', 'zhang', 'page', '2hand', 'chotdon']
     shop_phones = ['0336927690', '336927690']
     if any(k in ten for k in shop_keywords):
         return True
     if sdt in shop_phones:
         return True
+
+    # Tên khách trông giống địa chỉ (bị xoay → trường bị nhầm)
+    # Địa chỉ thường có: số nhà (digit ở đầu), từ khóa hành chính
+    address_keywords = ['phường', 'quận', 'đường', 'thành phố', 'tỉnh',
+                        'ngõ', 'huyện', 'xã', 'thị trấn', 'tp.', 'p.']
+    if any(k in ten for k in address_keywords):
+        return True
+
+    # Tên khách bắt đầu bằng số (địa chỉ kiểu "78 nguyễn...")
+    ten_strip = ten.strip()
+    if ten_strip and ten_strip[0].isdigit():
+        return True
+
+    # Tổng tiền = 0 trong khi có dữ liệu khác → parse thất bại
+    so_tien = data.get('so_tien', {})
+    tong = so_tien.get('tong', data.get('tong_tien', None))
+    if tong == 0 and ten_strip:
+        return True
+
     return False
 
 
