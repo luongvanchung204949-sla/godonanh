@@ -57,15 +57,16 @@ def fix_image_rotation(image_bytes: bytes) -> bytes:
         return image_bytes
 
 
-def rotate_180(image_bytes: bytes) -> bytes:
+def rotate_image(image_bytes: bytes, degrees: int) -> bytes:
+    """Xoay ảnh theo số độ chỉ định (90, 180, 270)."""
     try:
         img = Image.open(io.BytesIO(image_bytes))
-        img = img.rotate(180)
+        img = img.rotate(degrees, expand=True)
         output = io.BytesIO()
         img.save(output, format='JPEG', quality=95)
         return output.getvalue()
     except Exception as e:
-        print(f"[Rotate 180] Error: {e}")
+        print(f"[Rotate {degrees}] Error: {e}")
         return image_bytes
 
 
@@ -155,13 +156,15 @@ async def extract_order_info(image_bytes: bytes) -> dict | None:
 
     result = await call_claude(image_bytes)
 
-    needs_rotation = result and (result.get('_wrong_format') or is_result_wrong(result))
-    if needs_rotation:
-        print("[Rotation] Thử xoay 180° và OCR lại")
-        rotated = rotate_180(image_bytes)
-        result2 = await call_claude(rotated)
-        if result2 and not result2.get('_wrong_format') and not is_result_wrong(result2):
-            result = result2
-            print("[Rotation] Xoay 180° thành công")
+    # Nếu sai → thử lần lượt các góc xoay: 180°, 90°, 270°
+    if result and (result.get('_wrong_format') or is_result_wrong(result)):
+        for degrees in [180, 90, 270]:
+            print(f"[Rotation] Thử xoay {degrees}° và OCR lại")
+            rotated = rotate_image(image_bytes, degrees)
+            result2 = await call_claude(rotated)
+            if result2 and not result2.get('_wrong_format') and not is_result_wrong(result2):
+                result = result2
+                print(f"[Rotation] Xoay {degrees}° thành công")
+                break
 
     return result
